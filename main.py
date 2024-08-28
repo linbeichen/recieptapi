@@ -13,7 +13,11 @@ app.add_middleware(
 )
 receiptOcrEndpoint = 'https://ocr.asprise.com/api/v1/receipt'
 item_list = []
- 
+
+@app.get("/test/")
+async def test_route():
+    return {"message": "Test route is working"}
+
 @app.post("/upload/")
 async def create_upload_file(uploaded_file: UploadFile = File(...)):
     if uploaded_file.filename[-3:] != "jpg" and uploaded_file.filename[-3:] != "peg" and uploaded_file.filename[-3:] != "png":
