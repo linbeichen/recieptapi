@@ -3,7 +3,13 @@ import requests
 import json
  
 app = FastAPI()
- 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # 允许的源
+    allow_credentials=True,
+    allow_methods=["*"],  # 允许的HTTP方法
+    allow_headers=["*"],  # 允许的HTTP头
+)
 receiptOcrEndpoint = 'https://ocr.asprise.com/api/v1/receipt'
 item_list = []
  
