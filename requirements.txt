@@ -1,2 +1,4 @@
 fastapi[all]
 requests
+uvicorn
+python-multipart
