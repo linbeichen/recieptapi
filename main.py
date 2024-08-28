@@ -28,8 +28,11 @@ async def create_upload_file(uploaded_file: UploadFile = File(...)):
             if 'receipts' in data and len(data['receipts']) > 0 and 'items' in data['receipts'][0]:
                 items = data['receipts'][0]['items']
                 for item in items:
-                    item_list.append(item['description']) #ge tthe product name
+                    item_list.append(item['description']) #get the product name
     except:
         raise HTTPException(status_code=404, detail="Error with file scanning.")
+    finally:
+        if os.path.exists(file_location):
+            os.remove(file_location)
     #print(item_list)
     return {"item_list": item_list}
