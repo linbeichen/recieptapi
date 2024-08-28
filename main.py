@@ -2,48 +2,58 @@ from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import requests
 import json
-import os
+import io
+import logging
+
 app = FastAPI()
+
+# 设置日志
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 允许的源
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],  # 允许的HTTP方法
-    allow_headers=["*"],  # 允许的HTTP头
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
-receiptOcrEndpoint = 'https://ocr.asprise.com/api/v1/receipt'
-item_list = []
 
-@app.get("/test/")
-async def test_route():
-    return {"message": "Test route is working"}
+receiptOcrEndpoint = 'https://ocr.asprise.com/api/v1/receipt'
 
 @app.post("/upload/")
 async def create_upload_file(uploaded_file: UploadFile = File(...)):
-    if uploaded_file.filename[-3:] != "jpg" and uploaded_file.filename[-3:] != "peg" and uploaded_file.filename[-3:] != "png":
-        raise HTTPException(status_code=404, detail="File type incorrect")
+    if not uploaded_file.filename.lower().endswith(('.jpg', '.jpeg', '.png')):
+        raise HTTPException(status_code=415, detail="不支持的文件类型")
+    
     try:
-        file_location = f"data/sample_image" #get location to store uploaded image
-        with open(file_location, "wb+") as file_object:
-            file_object.write(await uploaded_file.read()) #save the image
- 
-        with open(file_location, "rb") as file_object:
-            r = requests.post(receiptOcrEndpoint, data={
-                'client_id': 'TEST',
-                'recognizer': 'auto',
-                'ref_no': 'ocr_python_123',
-            }, files={"file": file_object})
-           
-            data = json.loads(r.text) #the receipt info as text
- 
-            if 'receipts' in data and len(data['receipts']) > 0 and 'items' in data['receipts'][0]:
-                items = data['receipts'][0]['items']
-                for item in items:
-                    item_list.append(item['description']) #get the product name
-    except:
-        raise HTTPException(status_code=404, detail="Error with file scanning.")
-    finally:
-        if os.path.exists(file_location):
-            os.remove(file_location)
-    #print(item_list)
-    return {"item_list": item_list}
+        contents = await uploaded_file.read()
+        logger.info(f"文件大小: {len(contents)} 字节")
+
+        r = requests.post(receiptOcrEndpoint, data={
+            'client_id': 'TEST',
+            'recognizer': 'auto',
+            'ref_no': 'ocr_python_123',
+        }, files={"file": (uploaded_file.filename, io.BytesIO(contents), uploaded_file.content_type)})
+        
+        logger.info(f"OCR服务响应状态码: {r.status_code}")
+        logger.info(f"OCR服务响应内容: {r.text[:200]}...")  # 记录响应的前200个字符
+
+        r.raise_for_status()  # 如果响应状态码不是200，将引发异常
+        data = r.json()
+        
+        item_list = []
+        if 'receipts' in data and data['receipts'] and 'items' in data['receipts'][0]:
+            items = data['receipts'][0]['items']
+            item_list = [item['description'] for item in items]
+        
+        return {"item_list": item_list}
+    except requests.RequestException as e:
+        logger.error(f"OCR服务请求失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"OCR服务请求失败: {str(e)}")
+    except json.JSONDecodeError as e:
+        logger.error(f"OCR服务返回了无效的JSON: {str(e)}")
+        raise HTTPException(status_code=500, detail="OCR服务返回了无效的JSON")
+    except Exception as e:
+        logger.error(f"处理文件时发生错误: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"处理文件时发生错误: {str(e)}")
