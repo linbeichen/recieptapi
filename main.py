@@ -23,7 +23,7 @@ receiptOcrEndpoint = 'https://ocr.asprise.com/api/v1/receipt'
 
 @app.post("/upload/")
 async def create_upload_file(uploaded_file: UploadFile = File(...)):
-    if not uploaded_file.filename.lower().endswith(('.jpg', '.jpeg', '.png')):
+    if not uploaded_file.filename.lower().endswith(('.jpeg', '.png')):
         raise HTTPException(status_code=415, detail="不支持的文件类型")
     
     try:
@@ -45,7 +45,13 @@ async def create_upload_file(uploaded_file: UploadFile = File(...)):
         item_list = []
         if 'receipts' in data and data['receipts'] and 'items' in data['receipts'][0]:
             items = data['receipts'][0]['items']
-            item_list = [item['description'] for item in items]
+            item_list = [
+                {
+                    "description": item['description'],
+                    "qty": item.get('qty', '1')
+                }
+                for item in items
+            ]
         
         return {"item_list": item_list}
     except requests.RequestException as e:
