@@ -19,47 +19,56 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-receiptOcrEndpoint = 'https://ocr.asprise.com/api/v1/receipt'
-
+mindee_endpoint = "https://api.mindee.net/v1/products/mindee/expense_receipts/v5/predict"
+mindee_api_key = "413c3140cb93daff17536ec583083000"
 @app.post("/upload/")
 async def create_upload_file(uploaded_file: UploadFile = File(...)):
-    if not uploaded_file.filename.lower().endswith(('.jpeg', '.png')):
-        raise HTTPException(status_code=415, detail="不支持的文件类型")
+    if not uploaded_file.filename.lower().endswith(('.jpg', '.jpeg', '.png')):
+        raise HTTPException(status_code=415, detail="Unsupported file type")
     
     try:
         contents = await uploaded_file.read()
-        logger.info(f"文件大小: {len(contents)} 字节")
-
+        logger.info(f"File size: {len(contents)} bytes")
+        #使用Mindee API
+        headers = {
+            "Authorization": f"Token {mindee_api_key}"
+        }
+        files = {
+            "document": (uploaded_file.filename, contents, uploaded_file.content_type)
+        }
+        r = requests.post(mindee_endpoint, headers=headers, files=files)
+        '''
         r = requests.post(receiptOcrEndpoint, data={
             'client_id': 'TEST',
             'recognizer': 'auto',
             'ref_no': 'ocr_python_123',
         }, files={"file": (uploaded_file.filename, io.BytesIO(contents), uploaded_file.content_type)})
-        
-        logger.info(f"OCR服务响应状态码: {r.status_code}")
-        logger.info(f"OCR服务响应内容: {r.text[:200]}...")  # 记录响应的前200个字符
+        '''
+        logger.info(f"OCR Service Response status code: {r.status_code}")
+        logger.info(f"OCR Service Response content: {r.text[:200]}...")  # 记录响应的前200个字符
 
         r.raise_for_status()  # 如果响应状态码不是200，将引发异常
         data = r.json()
         
         item_list = []
-        if 'receipts' in data and data['receipts'] and 'items' in data['receipts'][0]:
-            items = data['receipts'][0]['items']
+        if 'document' in data and 'inference' in data['document'] and 'prediction' in data['document']['inference']:
+            line_items = data['document']['inference']['prediction'].get('line_items', [])
             item_list = [
                 {
-                    "description": item['description'],
-                    "qty": item.get('qty', '1')
+                    "description": item.get('description', ''),
+                    "qty": item.get('quantity', '1')
                 }
-                for item in items
+                for item in line_items
             ]
         
         return {"item_list": item_list}
+        
     except requests.RequestException as e:
-        logger.error(f"OCR服务请求失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"OCR服务请求失败: {str(e)}")
+        logger.error(f"OCR Service request fail: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"OCR Service Request fail: {str(e)}")
     except json.JSONDecodeError as e:
-        logger.error(f"OCR服务返回了无效的JSON: {str(e)}")
-        raise HTTPException(status_code=500, detail="OCR服务返回了无效的JSON")
+        logger.error(f"OCR Service Returns Useless JSON: {str(e)}")
+        raise HTTPException(status_code=500, detail="OCR Service Returns Useless JSON")
     except Exception as e:
-        logger.error(f"处理文件时发生错误: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"处理文件时发生错误: {str(e)}")
+        logger.error(f"File Processing Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"File Processing Error: {str(e)}")
