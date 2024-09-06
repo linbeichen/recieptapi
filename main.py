@@ -4,9 +4,31 @@ import requests
 import json
 import io
 import logging
+# new package for cron task
+import aiocron
+import aiohttp
+from datetime import datetime, time
+
 
 app = FastAPI()
 
+''' 
+async def is_active_hours():
+    now = datetime.now().time()
+    return time(9,0) <= now <= time(18,0) # assume active time between 9:00 and 18:00
+'''
+@aiocron.crontab('*/10 * * * *')
+async def self_ping():
+    async with aiohttp.ClientSession() as session:
+        async with session.get('https://recieptapi.onrender.com/health') as response:
+            print(f"Health check response: {response.status}")
+   
+@app.on_event("startup")
+async def startup_event():
+    self_ping.start()
+
+
+# set log
 # 设置日志
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -72,3 +94,8 @@ async def create_upload_file(uploaded_file: UploadFile = File(...)):
     except Exception as e:
         logger.error(f"File Processing Error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"File Processing Error: {str(e)}")
+
+
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy"}
